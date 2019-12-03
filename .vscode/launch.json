@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/DDZ_A/bin/prefsum.out",
-            "args": ["-m 2", "-n 9", "-t${workspaceFolder}/DDZ_A/bin/test.txt"],
+            "args": ["-m 4", "-n 4", "-t${workspaceFolder}/DDZ_A/bin/test.txt"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
