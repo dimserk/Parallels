@@ -1,9 +1,7 @@
-#include <cstdlib>
-#include <cstdio>
-#include <unistd.h>
 #include <iostream>
 #include <fstream>
-#include <cstring>
+#include <string>
+#include <regex>
 #include <cmath>
 #include <omp.h>
 #include "mpich/mpi.h"
@@ -16,11 +14,10 @@
 
 using namespace std;
 
-static const char* opt_string = "t:m:n:";
-
-struct command_args_t {
+struct command_line_args_t {
     int seq_num;
     int seq_len;
+    int proc_num;
     bool test_flag;
     string test_filename;
 };
@@ -73,71 +70,140 @@ int main(int argc, char** argv) {
 
     if (comm_rank == MASTER_PROC_RANK) { // Код управляющего процесса (0)
         // Настройки по умолчанию
-        command_args_t master_args;
-        master_args.seq_num = 10;
-        master_args.seq_len = 30;
-        master_args.test_flag = false;
-        master_args.test_filename = ""; // TODO empty string
+        command_line_args_t command_line_args;
+        command_line_args.seq_num = -1;
+        command_line_args.seq_len = -1;
+        command_line_args.proc_num = -1;
+        command_line_args.test_flag = false;
+        //command_line_args.test_filename = ""; // TODO empty string
 
-        // Обработка командной строки
-        opterr = 0;
-        int opt = getopt(argc, argv, opt_string);
-        while (opt != -1) {
-            switch (opt) {
-            case 't':
-                master_args.test_flag = true;
-                master_args.test_filename = optarg;
-                break;
-            
-            case 'm':
-                master_args.seq_num = atoi(optarg);
-                break;
-
-            case 'n':
-                master_args.seq_len = atoi(optarg);
-                break;
-
-            default:
-                cout << "Argument error! (" << argv[optind-1] << ")" << endl;
-                break;
+        int comm_line_posit;
+        try {
+            for (comm_line_posit  = 1; comm_line_posit < argc; comm_line_posit++) {
+                if(strcmp("-t", argv[comm_line_posit]) == 0) {
+                    command_line_args.test_flag = true;
+                    command_line_args.test_filename = argv[++comm_line_posit];
+                    continue;
+                }
+                else if (strcmp("-p", argv[comm_line_posit]) == 0) {
+                    command_line_args.proc_num = stoi(argv[++comm_line_posit]);
+                    if (command_line_args.proc_num <= 0 || command_line_args.proc_num > 8) {
+                        throw invalid_argument("Incorrect kernel number");
+                    }
+                    continue;
+                }
+                else if (strcmp("-m", argv[comm_line_posit]) == 0) {
+                    command_line_args.seq_num = stoi(argv[++comm_line_posit]);
+                    if (command_line_args.seq_num <= 0 || command_line_args.proc_num % comm_size != 0) {
+                        throw invalid_argument("Sequence number should be above 0");
+                    }
+                    continue;
+                }
+                else if (strcmp("-n", argv[comm_line_posit]) == 0) {
+                    command_line_args.seq_len = stoi(argv[++comm_line_posit]);
+                    if (command_line_args.seq_len <= 0) {
+                        throw invalid_argument("Sequence length should be above 0");
+                    }
+                    continue;
+                }
+                else {
+                    cout << "Error, Unknown command line argument: " << argv[comm_line_posit] << endl;
+                    return -1;
+                } 
             }
+        }
+        catch (invalid_argument) {
+            cout << "Error, invalid argumnet value: " << argv[comm_line_posit] << endl;
+            return -1;
+        }
+        catch (out_of_range) {
+            cout << "Error, argument value out of range: "  << argv[comm_line_posit] << endl;
+            return -1;
+        }
 
-            opt = getopt(argc, argv, opt_string);
+        if (command_line_args.seq_num == -1) {
+            cout << "Error, sequence number is required argument!" << endl;
+            return -2;
+        }
+        else if (command_line_args.seq_len == -1) {
+            cout << "Error, sequence length is required argument!" << endl;
+            return -2;
+        }
+        else if (command_line_args.proc_num == -1) {
+            cout << "Error, sequence number is required argument!" << endl;
+            return -2;
         }
 
         #ifdef DEBUG
-        cout << "Command args" << endl;
+        cout << "Command args:" << endl;
         cout << "Program: " << argv[0] << endl;
-        cout << "M: " << master_args.seq_num << endl;
-        cout << "N: " << master_args.seq_len << endl;
-        cout << "Test mode: " << master_args.test_flag << endl;
-        cout << "Test file: " << master_args.test_filename << endl;
+        cout << "M: " << command_line_args.seq_num << endl;
+        cout << "N: " << command_line_args.seq_len << endl;
+        cout << "P: " << command_line_args.proc_num << endl;
+        cout << "Test mode: " << command_line_args.test_flag << endl;
+        cout << "Test file: " << command_line_args.test_filename << endl;
         #endif
 
         // Выделение памяти под последовательности
         int **m_arrays;
-        m_arrays = new int*[master_args.seq_num];
-        for (int i = 0; i < master_args.seq_num; i++) {
-            m_arrays[i] = new int[master_args.seq_len];
+        m_arrays = new int*[command_line_args.seq_num];
+        for (int i = 0; i < command_line_args.seq_num; i++) {
+            m_arrays[i] = new int[command_line_args.seq_len];
         }
         
+        int i, j;
+        string input_buf;
+        regex num_re("(-?\\d+)");
+        smatch match;
+
         // Заполение массива полседовательностей
-        if (master_args.test_flag) {
+        if (command_line_args.test_flag) {
             // В случае запуска в тестовом режиме читаем данные из файла
-            ifstream fin(master_args.test_filename); 
+            ifstream fin(command_line_args.test_filename); 
             if (fin.is_open()) {
-                for (int i = 0; i < master_args.seq_num; i++) {
-                    for (int j = 0; j < master_args.seq_len; j++) {
-                        fin >> m_arrays[i][j];
+                i = 0;
+                while (!fin.eof()) {
+                    getline(fin, input_buf);
+                    if (input_buf.empty()) {
+                        continue;
+                    }
+                    sregex_iterator next(input_buf.begin(), input_buf.end(), num_re), end;
+                    ptrdiff_t match_count(distance(next, end));
+                    if (int(match_count) == command_line_args.seq_len) {
+                        j = 0;
+                        while (next != end) {
+                            smatch match = *next++;
+                            try {
+                                m_arrays[i][j++] = stoi(match.str());
+                            }
+                            catch (out_of_range) {
+                                cout << "Error in line: " << input_buf << " (" << i+1 << ',' << j+1 << ") int overflow" << endl;
+                                return -1;
+                            }
+                        }
+                        i++;
+                    }
+                    else {
+                        cout << "Error in line: " << input_buf << " incorrect length" << endl;
+                        return -3; 
                     }
                 }
+                if (i != command_line_args.seq_num) {
+                    cout << "Error, not enought seqs!" << endl;
+                    return -3;
+                }
             }
+            else {
+                cout << "Error, file: " << command_line_args.test_filename << " can't be opened!" << endl;
+                return -3;
+            }
+            
             fin.close();
         }
         else {
             // В случае запуска в режиме эксперемента генереруем случайным образом
-            for (int i = 0; i < master_args.seq_num; i++) {
-                    for (int j = 0; j < master_args.seq_len; j++) {
+            for (int i = 0; i < command_line_args.seq_num; i++) {
+                    for (int j = 0; j < command_line_args.seq_len; j++) {
                         m_arrays[i][j] = RAND_START + rand() % RAND_STOP;
                     }
             }
@@ -145,8 +211,8 @@ int main(int argc, char** argv) {
         
         #ifdef DEBUG 
         cout << endl << "M_Arrays" << endl;
-        for (int i = 0; i < master_args.seq_num; i++) {
-                for (int j = 0; j < master_args.seq_len; j++) {
+        for (int i = 0; i < command_line_args.seq_num; i++) {
+                for (int j = 0; j < command_line_args.seq_len; j++) {
                     cout << m_arrays[i][j] << " ";
                 }
                 cout << endl;
@@ -160,56 +226,56 @@ int main(int argc, char** argv) {
         c_start = clock();
 
         // Указываем всем процессам длину последовательностей и количество обрабатываемых послдеовательностей 
-        int seq_per_proc = master_args.seq_num / comm_size;
-        MPI_Bcast(&master_args.seq_len, 1, MPI_INT, MASTER_PROC_RANK, MPI_COMM_WORLD);
+        int seq_per_proc = command_line_args.seq_num / comm_size;
+        MPI_Bcast(&command_line_args.seq_len, 1, MPI_INT, MASTER_PROC_RANK, MPI_COMM_WORLD);
         MPI_Bcast(&seq_per_proc, 1, MPI_INT, MASTER_PROC_RANK, MPI_COMM_WORLD);
 
         // Рассылка последовательностей по процессам
         int dest_num, tmp_i = 0;
         int *master_seq_nums = new int[seq_per_proc];
-        for(int i = 0; i < master_args.seq_num; i++) {
+        for(int i = 0; i < command_line_args.seq_num; i++) {
             dest_num = i % comm_size;
             if (dest_num == MASTER_PROC_RANK) { // Кроме нулевого потока
                 master_seq_nums[tmp_i++] = i;
                 continue;
             }
-            MPI_Send(m_arrays[i], master_args.seq_len, MPI_INT, dest_num, TAG, MPI_COMM_WORLD);
+            MPI_Send(m_arrays[i], command_line_args.seq_len, MPI_INT, dest_num, TAG, MPI_COMM_WORLD);
         }
 
         // * Calculations
-        int **pref_sum_arr = new int*[master_args.seq_num];
+        int **pref_sum_arr = new int*[command_line_args.seq_num];
 
         #pragma omp parallel for
         for(int i = 0; i < seq_per_proc; i++) {
-            pref_sum_arr[master_seq_nums[i]] = pref_sum(m_arrays[master_seq_nums[i]], master_args.seq_len);
+            pref_sum_arr[master_seq_nums[i]] = pref_sum(m_arrays[master_seq_nums[i]], command_line_args.seq_len);
         }
 
         #ifdef DEBUG 
         string pref_sum_str;
         for (int i = 0; i < seq_per_proc; i++) {
             pref_sum_str = "Proc#" + to_string(comm_rank) + " pref_sum arr: ";
-            for (int j = 0; j < master_args.seq_len; j++) {
+            for (int j = 0; j < command_line_args.seq_len; j++) {
                 pref_sum_str += to_string(pref_sum_arr[i][j]) + " ";
             }
             printf("%s\n", pref_sum_str.c_str());
         }
         #endif
 
-        for (int i = 0; i < master_args.seq_num; i++) {
+        for (int i = 0; i < command_line_args.seq_num; i++) {
             dest_num = i % comm_size;
             if (dest_num == MASTER_PROC_RANK) {
                 continue;
             }
-            pref_sum_arr[i] =  new int[master_args.seq_len];
-            MPI_Recv(pref_sum_arr[i], master_args.seq_len, MPI_INT, dest_num, TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            pref_sum_arr[i] =  new int[command_line_args.seq_len];
+            MPI_Recv(pref_sum_arr[i], command_line_args.seq_len, MPI_INT, dest_num, TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
 
         c_stop = clock();
         calc_time = (double)(c_stop - c_start) / CLOCKS_PER_SEC;
 
-        if (master_args.test_flag) {
-            for (int i = 0; i < master_args.seq_num; i++) {
-                for (int j = 0; j < master_args.seq_len; j++) {
+        if (command_line_args.test_flag) {
+            for (int i = 0; i < command_line_args.seq_num; i++) {
+                for (int j = 0; j < command_line_args.seq_len; j++) {
                     cout << pref_sum_arr[i][j] << " ";
                 }
                 cout << endl;
@@ -218,7 +284,7 @@ int main(int argc, char** argv) {
         cout << "Time of calculation is " << calc_time << "ms" << endl;
 
         // Очистка всех динамических массивов
-        for (int i = 0; i < master_args.seq_num; i++) {
+        for (int i = 0; i < command_line_args.seq_num; i++) {
             delete[] m_arrays[i];
             delete[] pref_sum_arr[i];
         }

@@ -7,9 +7,9 @@
             "label": "MPI+OMP debug build",
             "type": "shell",
             "command": "mpic++ -fopenmp -DDEBUG -g -o ${workspaceFolder}/DDZ_A/bin/prefsum.out ${workspaceFolder}/DDZ_A/main.cpp",
-            "group": "build"
+            "group": "build",
+            "problemMatcher": []
         },
-
         {
             "label": "MPI+OMP release build",
             "type": "shell",
