@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
         
         int i, j;
         string input_buf;
-        regex num_re("(-?\\d+)");
+        regex num_re("([-.,\\w]+)");
         smatch match;
 
         // Заполение массива полседовательностей
@@ -175,9 +175,16 @@ int main(int argc, char** argv) {
                             smatch match = *next++;
                             try {
                                 m_arrays[i][j++] = stoi(match.str());
+                                if (match.str().find(',') != string::npos) {
+                                    throw invalid_argument("");
+                                }
+                            }
+                            catch (invalid_argument) {
+                                cout << "Error in line: " << input_buf << " (" << i+1 << ',' << j << ") invalid argument" << endl;
+                                return -3;
                             }
                             catch (out_of_range) {
-                                cout << "Error in line: " << input_buf << " (" << i+1 << ',' << j+1 << ") int overflow" << endl;
+                                cout << "Error in line: " << input_buf << " (" << i+1 << ',' << j << ") int overflow" << endl;
                                 return -1;
                             }
                         }
