@@ -6,7 +6,14 @@
         {
             "label": "MPI+OMP debug build",
             "type": "shell",
-            "command": "mpic++ -fopenmp -DDEBUG -o ${workspaceFolder}/DDZ_A/bin/prefsum.out ${workspaceFolder}/DDZ_A/main.cpp",
+            "command": "mpic++ -fopenmp -DDEBUG -DCHECK -o ${workspaceFolder}/DDZ_A/bin/prefsum.out ${workspaceFolder}/DDZ_A/main.cpp",
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "MPI+OMP release with check build",
+            "type": "shell",
+            "command": "mpic++ -fopenmp -DCHECK -o ${workspaceFolder}/DDZ_A/bin/prefsum.out ${workspaceFolder}/DDZ_A/main.cpp",
             "group": "build",
             "problemMatcher": []
         },
@@ -14,7 +21,8 @@
             "label": "MPI+OMP release build",
             "type": "shell",
             "command": "mpic++ -fopenmp -o ${workspaceFolder}/DDZ_A/bin/prefsum.out ${workspaceFolder}/DDZ_A/main.cpp",
-            "group": "build"
+            "group": "build",
+            "problemMatcher": []
         }
     ]
 }
