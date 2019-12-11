@@ -23,6 +23,21 @@
             "command": "mpic++ -fopenmp -o ${workspaceFolder}/DDZ_A/bin/prefsum.out ${workspaceFolder}/DDZ_A/main.cpp",
             "group": "build",
             "problemMatcher": []
-        }
+        },
+        {
+            "label": "OMP debug build",
+            "type": "shell",
+            "command": "g++ -fopenmp -DDEBUG_P -o ${workspaceFolder}/DDZ/bin/kclustering.out ${workspaceFolder}/DDZ/main.cpp",
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
+            "label": "OMP release build",
+            "type": "shell",
+            "command": "g++ -fopenmp -o ${workspaceFolder}/DDZ/bin/kclustering.out ${workspaceFolder}/DDZ/main.cpp",
+            "group": "build",
+            "problemMatcher": []
+        },
+
     ]
 }
