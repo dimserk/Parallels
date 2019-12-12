@@ -199,12 +199,12 @@ int main (int argc, char** argv) {
                     }
                     catch (invalid_argument) {
                         cerr << "#Error# Invalid point declaration: " << input_buf
-                            << "(invalid coord)" << endl;
+                            << " (invalid coord)" << endl;
                         throw exception();
                     }
                     catch (out_of_range) {
                         cerr << "#Error# Invalid point declaration: " << input_buf
-                            << "(overflowed coord)" << endl;
+                            << " (overflowed coord)" << endl;
                         throw exception();
                     }
                 }
@@ -218,11 +218,14 @@ int main (int argc, char** argv) {
                 fin.close();
             }
             else {
+                // Обработка случая не открывшегося файла
                 string reason;
                 if (fin.bad()) {
-                    reason = "Error occured while reading file";
+                    reason = "System error occured while reading file";
                 } else if (fin.fail()) {
                     reason = "No such file or has no permission";
+                } else {
+                    reason = "Problem with i/o hardware";
                 }
 
                 cerr << "#Error# Can not open " << command_line_args.test_filename 
@@ -260,7 +263,7 @@ int main (int argc, char** argv) {
     // * Обсчёт данных
     // * =============
 
-    bool iter_flag;
+    bool same_clusters_flag;
     int min_clust;
     double min_dist, tmp_dist, n_x, n_y, x_sum, y_sum, c_start, c_stop;
     vector<int> *belong_list = new vector<int>[command_line_args.clust_num];
@@ -273,7 +276,7 @@ int main (int argc, char** argv) {
     c_start = omp_get_wtime();
 
     while (true) {
-        iter_flag = true;
+        same_clusters_flag = true;
 
         // Кластеризация точек
         #pragma omp parallel for private(min_dist, tmp_dist, min_clust) shared(belong_list)
@@ -327,7 +330,8 @@ int main (int argc, char** argv) {
 
             // Определение изменений координат центроидов
             omp_set_lock(&update_lock);
-            iter_flag = iter_flag && (f_equality(clusters_arr[i].x, n_x) && f_equality(clusters_arr[i].y, n_y));
+            same_clusters_flag = same_clusters_flag
+                && (f_equality(clusters_arr[i].x, n_x) && f_equality(clusters_arr[i].y, n_y));
             omp_unset_lock(&update_lock);
 
             clusters_arr[i].x = n_x;
@@ -343,7 +347,7 @@ int main (int argc, char** argv) {
         #endif
 
         // Если координаты центроидов не изменились, то заканчиваем вычисления
-        if (iter_flag) {
+        if (same_clusters_flag) {
             break;
         }
 
@@ -365,9 +369,10 @@ int main (int argc, char** argv) {
 
     if (command_line_args.test_flag) {
         for (int i = 0; i < command_line_args.clust_num; i++) {
-            cout << "Cluster:" << fixed << i+1 << " (" << clusters_arr[i].x << " : " << clusters_arr[i].y << ')' << endl;
+            cout << "Centroid:" << fixed << i+1 << " (" << clusters_arr[i].x
+                 << ':' << clusters_arr[i].y << ')' << endl;
             for (int j = 0; j < belong_list[i].size(); j++) {
-                cout << " point (" << points_arr[belong_list[i][j]].x << " : "
+                cout << " point (" << points_arr[belong_list[i][j]].x <<  ':'
                     << points_arr[belong_list[i][j]].x << ')' << endl;
             }
         }
