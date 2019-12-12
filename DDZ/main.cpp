@@ -116,7 +116,8 @@ int main (int argc, char** argv) {
                 continue;
             }
             else {
-                cerr << "#Error# Unknown argument: " << argv[comm_line_position] << endl;
+                cerr << "#Error# Unknown argument: " 
+                     << argv[comm_line_position] << endl;
                 return -1;
             } 
         }
