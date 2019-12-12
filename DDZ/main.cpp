@@ -8,11 +8,17 @@
 #include <vector>
 #include <omp.h>
 
+//#include <stdexcept>
+
 using namespace std;
 
 #define RAND_START 1
 #define RAND_STOP 1000
 #define PRECISION 0.01
+
+#define PROC_NUM_POSITION 1
+#define POINTS_NUM_POSITION 2
+#define CLUSTERS_NUM_POSITION 3
 
 class CommandLineArgs {
     public:
@@ -60,13 +66,15 @@ bool f_equality(double &val1, double &val2) {
 
 int main (int argc, char** argv) {
 
-    // * ==========================================
-    // * Блок обработки аргументов командной строки
-    // * ==========================================
+    // * =====================================
+    // * Обработка аргументов командной строки
+    // * =====================================
 
     CommandLineArgs command_line_args;
 
     int comm_line_position;
+    string argm_name;
+
     try {
         for (comm_line_position = 1; comm_line_position < argc; comm_line_position++) {
             if(strcmp("-t", argv[comm_line_position]) == 0) {
@@ -79,24 +87,28 @@ int main (int argc, char** argv) {
                 }
                 continue;
             }
-            else if (strcmp("-p", argv[comm_line_position]) == 0) {
-                command_line_args.proc_num = stoi(argv[++comm_line_position]);
+            else if (comm_line_position == PROC_NUM_POSITION) {
+                argm_name = "proc_num";
+                command_line_args.proc_num = stoi(argv[comm_line_position]);
 
-                if (command_line_args.proc_num <= 0 || command_line_args.proc_num > 8) {
+                if (command_line_args.proc_num <= 0 || 
+                    command_line_args.proc_num > omp_get_max_threads()) {
                     throw invalid_argument("Invalid proces number");
                 }
                 continue;
             }
-            else if (strcmp("-m", argv[comm_line_position]) == 0) {
-                command_line_args.point_num = stoi(argv[++comm_line_position]);
+            else if (comm_line_position == POINTS_NUM_POSITION) {
+                argm_name = "points_num";
+                command_line_args.point_num = stoi(argv[comm_line_position]);
 
                 if (command_line_args.point_num <= 0) {
                     throw invalid_argument("Invalid point number");
                 }
                 continue;
             }
-            else if (strcmp("-k", argv[comm_line_position]) == 0) {
-                command_line_args.clust_num = stoi(argv[++comm_line_position]);
+            else if (comm_line_position == CLUSTERS_NUM_POSITION) {
+                argm_name = "clusters_num";
+                command_line_args.clust_num = stoi(argv[comm_line_position]);
 
                 if (command_line_args.clust_num <= 0) {
                     throw invalid_argument("Invalid cluster number");
@@ -110,11 +122,11 @@ int main (int argc, char** argv) {
         }
     }
     catch (invalid_argument) {
-        cerr << "#Error# Argument " << argv[comm_line_position-1] << " is not set correctly" << endl;
+        cerr << "#Error# Argument " << argm_name << " is not set correctly" << endl;
         return -1;
     }
     catch (out_of_range) {
-        cout << "#Error# Argument " << argv[comm_line_position-1] << " has overflowed value" << endl;
+        cerr << "#Error# Argument " << argm_name << " has overflowed value" << endl;
         return -1;
     }
 
@@ -128,25 +140,25 @@ int main (int argc, char** argv) {
     #endif
 
     // Проверка наличия обязательных аргументов
-    string unset_arg;
+    argm_name.clear();
     if (command_line_args.proc_num == -1) {
-        unset_arg += "-p ";
+        argm_name += "proc_num ";
     }
     if (command_line_args.point_num == -1) {
-        unset_arg += "-m ";
+        argm_name += "points_num ";
     }
     if (command_line_args.clust_num == -1) {
-        unset_arg += "-k ";
+        argm_name += "clusters_num ";
     }
 
-    if (!unset_arg.empty()) {
-        cerr << "#Error# Argument(s) " << unset_arg << " required" << endl;
+    if (!argm_name.empty()) {
+        cerr << "#Error# Argument(s) " << argm_name << "required" << endl;
         return -2;
     }
 
-    // * =====================
-    // * Блок генерации данных
-    // * =====================
+    // * ================
+    // * Генерация данных
+    // * ================
 
     //Генерация центроидов (автоматическая при любом режиме работы)
     Point *clusters_arr = arr_generator(command_line_args.clust_num);
@@ -206,7 +218,15 @@ int main (int argc, char** argv) {
                 fin.close();
             }
             else {
-                cerr << "#Error# Can not open " << command_line_args.test_filename << endl;
+                string reason;
+                if (fin.bad()) {
+                    reason = "Error occured while reading file";
+                } else if (fin.fail()) {
+                    reason = "No such file or has no permission";
+                }
+
+                cerr << "#Error# Can not open " << command_line_args.test_filename 
+                    << " (" << reason << ')' << endl;
                 return -3;                
             }
         }
@@ -220,7 +240,7 @@ int main (int argc, char** argv) {
         }
     }
     else {
-        // Режим эксперемента
+        // Генерация случайных точек в режиме эксперемента
         points_arr = arr_generator(command_line_args.point_num);
     }
 
@@ -236,9 +256,9 @@ int main (int argc, char** argv) {
     cout << endl;
     #endif
 
-    // * ===================
-    // * Блок обсчёта данных
-    // * ===================
+    // * =============
+    // * Обсчёт данных
+    // * =============
 
     bool iter_flag;
     int min_clust;
@@ -337,9 +357,9 @@ int main (int argc, char** argv) {
 
     omp_destroy_lock(&update_lock);
 
-    // * =======================
-    // * Блок вывода результатов
-    // * =======================
+    // * =================
+    // * Вывод результатов
+    // * =================
 
     cout.precision(2);
 
@@ -355,6 +375,16 @@ int main (int argc, char** argv) {
     else {
         cout << "Time of calculation is " << fixed << c_stop - c_start << endl;
     }
+
+    #ifdef BENCHMARK
+    ofstream out("result.csv", ios_base::app);
+    string time = to_string(c_stop - c_start);
+    out << command_line_args.point_num << ';'
+        << command_line_args.clust_num << ';'
+        << command_line_args.proc_num << ';'
+        << time.replace(time.find("."), 1, ",") << endl;
+    out.close();
+    #endif
 
     // * ==============
     // * Очистка памяти

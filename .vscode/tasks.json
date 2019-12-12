@@ -38,6 +38,13 @@
             "group": "build",
             "problemMatcher": []
         },
+        {
+            "label": "OMP benckmark build",
+            "type": "shell",
+            "command": "g++ -fopenmp -DBENCHMARK -o ${workspaceFolder}/DDZ/bin/kclustering.out ${workspaceFolder}/DDZ/main.cpp",
+            "group": "build",
+            "problemMatcher": []
+        },
 
     ]
 }
